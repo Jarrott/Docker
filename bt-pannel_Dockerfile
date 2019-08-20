@@ -1,0 +1,100 @@
+FROM centos:latest
+MAINTAINER Jarrott <https://7yue.in>
+
+ENV REMOTE_PATH=https://github.com/Jarrott/Docker/raw/master \
+    LIBMEMCACHED_VERSION=1.0.18 \
+    RE2C_VERSION=1.0.1 \
+    BISON3_VERSION=3.3.2 \
+    MEMCACHED3_VERSION=3.1.3 \
+    MEMCACHED_VERSION=1.5 \
+    REDIS_VERSION=4.3.0 \
+    REDIS_SERVER_VERSION=5.0 \
+    PHP_70_PATH=/www/server/php/70 \
+    PHP_72_PATH=/www/server/php/72 \
+    NGINX_VERSION=1.15 \
+    LIBICONV_VERSION=1.15
+
+WORKDIR /tmp
+
+# install bt panel
+ADD ${REMOTE_PATH}/install_6.0.sh /tmp/install.sh
+RUN yum install -y wget cyrus-sasl-devel \
+    && chmod 777 install.sh \
+    && bash install.sh \
+    && rm -rf /tmp/*
+
+# install nginx
+RUN bash /www/server/panel/install/install_soft.sh 0 install nginx ${NGINX_VERSION} \
+    && rm -rf /tmp/*
+
+# install Memcached
+RUN bash /www/server/panel/install/install_soft.sh 0 install memcached ${MEMCACHED_VERSION} \
+    && rm -rf /tmp/*
+
+# install redis
+RUN bash /www/server/panel/install/install_soft.sh 0 install redis ${REDIS_SERVER_VERSION} \
+    && rm -rf /tmp/*
+
+# install pm2
+RUN bash /www/server/panel/install/install_soft.sh 0 install pm2 \
+    && rm -rf /tmp/*
+
+
+# install libiconv
+RUN wget https://sourceforge.net/projects/re2c/files/${RE2C_VERSION}/re2c-${RE2C_VERSION}.tar.gz \
+    && tar zxf re2c-${RE2C_VERSION}.tar.gz \
+    && cd re2c-${RE2C_VERSION} \
+    && ./configure \
+    && make && make install \
+    && cd /tmp \
+    && wget https://ftp.gnu.org/pub/gnu/libiconv/libiconv-${LIBICONV_VERSION}.tar.gz \
+    && tar zxf libiconv-${LIBICONV_VERSION}.tar.gz \
+    && cd libiconv-${LIBICONV_VERSION} \
+    && ./configure \
+    && make && make install \
+    && rm -rf /tmp/*
+
+# install libmemcached
+ADD ${REMOTE_PATH}/libmemcached-build.patch /tmp/libmemcached-build.patch
+RUN wget -c --no-check-certificate https://launchpad.net/libmemcached/1.0/${LIBMEMCACHED_VERSION}/+download/libmemcached-${LIBMEMCACHED_VERSION}.tar.gz \
+    && tar xzf libmemcached-${LIBMEMCACHED_VERSION}.tar.gz \
+    && patch -d libmemcached-${LIBMEMCACHED_VERSION} -p0 < /tmp/libmemcached-build.patch \
+    && cd libmemcached-${LIBMEMCACHED_VERSION} \
+    && ./configure \
+    && make && make install \
+    && rm -rf /tmp/*
+
+# 可以放在第二步骤,但是我放在这里了.在pannel中能迅速安装完成,5秒内.
+# install php7.0
+RUN wget http://ftp.gnu.org/gnu/bison/bison-${BISON3_VERSION}.tar.gz \
+    && tar -zxvf bison-${BISON3_VERSION}.tar.gz \
+    && cd bison-${BISON3_VERSION} \
+    && ./configure --prefix=/usr \
+    && make && make install \
+    && cd /tmp \
+    && bash /www/server/panel/install/install_soft.sh 0 install php 7.0 \
+    && bash /www/server/panel/install/install_soft.sh 1 install fileinfo 70 \
+    && bash /www/server/panel/install/install_soft.sh 1 install opcache 70 \
+    && bash /www/server/panel/install/install_soft.sh 1 install imagemagick 70 \
+    && rm -rf /tmp/*
+
+# install php7.2
+RUN bash /www/server/panel/install/install_soft.sh 0 install php 7.2 \
+    && bash /www/server/panel/install/install_soft.sh 1 install fileinfo 72 \
+    && bash /www/server/panel/install/install_soft.sh 1 install opcache 72 \
+    && bash /www/server/panel/install/install_soft.sh 1 install imagemagick 72 \
+    && rm -rf /tmp/*
+
+# install supervisord
+ADD ${REMOTE_PATH}/supervisord.conf /etc/supervisor/supervisord.conf
+RUN pip install supervisor \
+    && mkdir -p /etc/supervisor/conf.d /var/log/supervisor \
+    && rm -rf /tmp/*
+
+
+# expose port 端口多放了两个多余端口.以备不时之需
+EXPOSE 8888 80 443 21 20 888 3306 9001 6379 11211 19967 1777 2777 
+
+
+#Define the default command.
+CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]
