@@ -4,4 +4,6 @@ cd /etc/apt/ && wget https://github.com/Jarrott/Docker/raw/master/debian/sources
 
 source /etc/apt/sources.list
 
-apt-get update -y && apt-get vim -y
+apt-get update 
+
+apt-get vim -y
